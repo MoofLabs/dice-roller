@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Roll dice for Dungeons & Dragons - shake and throw virtual dice">
-  <title>D&D Dice Roller</title>
+  <meta name="description" content="Roll dice - shake and throw virtual dice">
+  <title>Dice Roller</title>
   
   <!-- PWA -->
   <link rel="manifest" href="./manifest.json">
@@ -68,46 +68,32 @@
         return audioContextRef.current;
       };
 
-      const playShake = () => {
+      const playRoll = () => {
         const ctx = getContext();
-        
-        const oscillator = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-        const filter = ctx.createBiquadFilter();
-        
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 400 + Math.random() * 300;
-        
-        filter.type = 'bandpass';
-        filter.frequency.value = 600;
-        filter.Q.value = 2;
-        
-        oscillator.connect(filter);
-        filter.connect(gainNode);
-        gainNode.connect(ctx.destination);
-        
-        gainNode.gain.setValueAtTime(0.05, ctx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
-        
-        oscillator.start(ctx.currentTime);
-        oscillator.stop(ctx.currentTime + 0.08);
-      };
-
-      const playThrow = () => {
-        const ctx = getContext();
-        const oscillator = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(ctx.destination);
-        
-        oscillator.frequency.setValueAtTime(400, ctx.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.3);
-        gainNode.gain.setValueAtTime(0.2, ctx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-        
-        oscillator.start(ctx.currentTime);
-        oscillator.stop(ctx.currentTime + 0.3);
+        // Multiple clicks for rolling sound
+        for (let i = 0; i < 8; i++) {
+          const oscillator = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+          const filter = ctx.createBiquadFilter();
+          
+          oscillator.type = 'sine';
+          oscillator.frequency.value = 400 + Math.random() * 300;
+          
+          filter.type = 'bandpass';
+          filter.frequency.value = 600;
+          filter.Q.value = 2;
+          
+          oscillator.connect(filter);
+          filter.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          
+          const startTime = ctx.currentTime + (i * 0.1);
+          gainNode.gain.setValueAtTime(0.05, startTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + 0.08);
+          
+          oscillator.start(startTime);
+          oscillator.stop(startTime + 0.08);
+        }
       };
 
       const playResult = () => {
@@ -129,7 +115,6 @@
 
       const playNat20 = () => {
         const ctx = getContext();
-        // Play a triumphant three-note fanfare
         const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
         
         notes.forEach((freq, i) => {
@@ -151,24 +136,19 @@
         });
       };
 
-      return { playShake, playThrow, playResult, playNat20 };
+      return { playRoll, playResult, playNat20 };
     };
 
     function DiceRoller() {
       const [diceConfig, setDiceConfig] = useState([]);
-      const [isShaking, setIsShaking] = useState(false);
       const [isRolling, setIsRolling] = useState(false);
       const [results, setResults] = useState([]);
-      const [shakeDuration, setShakeDuration] = useState(0);
-      const [hasMotionPermission, setHasMotionPermission] = useState(false);
       const [isMuted, setIsMuted] = useState(false);
-      const shakeStartTime = useRef(null);
-      const animationFrame = useRef(null);
+      const [hasMotionPermission, setHasMotionPermission] = useState(false);
       const lastShakeTime = useRef(0);
-      const shakeIntervalRef = useRef(null);
-      const { playShake, playThrow, playResult, playNat20 } = useAudio();
+      const { playRoll, playResult, playNat20 } = useAudio();
 
-      // Request motion permission immediately on mount
+      // Request motion permission immediately
       useEffect(() => {
         const requestPermission = async () => {
           if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -176,7 +156,6 @@
               const permission = await DeviceMotionEvent.requestPermission();
               setHasMotionPermission(permission === 'granted');
             } catch (error) {
-              console.log('Motion permission denied or error:', error);
               setHasMotionPermission(false);
             }
           } else if (window.DeviceMotionEvent) {
@@ -187,9 +166,9 @@
         requestPermission();
       }, []);
 
-      // Handle device motion (shake detection)
+      // Shake detection - triggers roll
       useEffect(() => {
-        if (!hasMotionPermission || !isShaking) return;
+        if (!hasMotionPermission || diceConfig.length === 0 || isRolling || results.length > 0) return;
 
         const handleMotion = (event) => {
           const acc = event.accelerationIncludingGravity;
@@ -199,14 +178,10 @@
             acc.x * acc.x + acc.y * acc.y + acc.z * acc.z
           );
 
-          console.log('Shake magnitude:', magnitude.toFixed(2));
-
-          // Detect a strong shake - this triggers the throw!
           if (magnitude > 20) {
             const now = Date.now();
-            if (now - lastShakeTime.current > 500) {
-              console.log('SHAKE TO THROW DETECTED!', magnitude.toFixed(2));
-              throwDice();
+            if (now - lastShakeTime.current > 1000) {
+              rollDice();
               lastShakeTime.current = now;
             }
           }
@@ -214,28 +189,7 @@
 
         window.addEventListener('devicemotion', handleMotion);
         return () => window.removeEventListener('devicemotion', handleMotion);
-      }, [hasMotionPermission, isShaking, isMuted]);
-
-      // Update shake duration
-      useEffect(() => {
-        if (isShaking) {
-          shakeStartTime.current = Date.now();
-          const updateDuration = () => {
-            setShakeDuration(Date.now() - shakeStartTime.current);
-            animationFrame.current = requestAnimationFrame(updateDuration);
-          };
-          animationFrame.current = requestAnimationFrame(updateDuration);
-        } else {
-          if (animationFrame.current) {
-            cancelAnimationFrame(animationFrame.current);
-          }
-        }
-        return () => {
-          if (animationFrame.current) {
-            cancelAnimationFrame(animationFrame.current);
-          }
-        };
-      }, [isShaking]);
+      }, [hasMotionPermission, diceConfig, isRolling, results]);
 
       // Keyboard controls
       useEffect(() => {
@@ -243,10 +197,8 @@
           if (e.code === 'Space' || e.code === 'Enter') {
             e.preventDefault();
             
-            if (!isShaking && !isRolling && results.length === 0 && diceConfig.length > 0) {
-              startShaking();
-            } else if (isShaking) {
-              throwDice();
+            if (!isRolling && results.length === 0 && diceConfig.length > 0) {
+              rollDice();
             } else if (results.length > 0) {
               rollAgain();
             }
@@ -255,39 +207,24 @@
 
         window.addEventListener('keydown', handleKeyPress);
         return () => window.removeEventListener('keydown', handleKeyPress);
-      }, [isShaking, isRolling, results, diceConfig]);
+      }, [isRolling, results, diceConfig]);
 
       const addDice = (sides) => {
-        setDiceConfig([...diceConfig, { sides, id: Date.now() }]);
+        setDiceConfig([...diceConfig, { sides, id: Date.now() + Math.random() }]);
       };
 
       const removeDice = (id) => {
         setDiceConfig(diceConfig.filter(d => d.id !== id));
       };
 
-      const startShaking = () => {
-        setIsShaking(true);
-        setResults([]);
+      const rollDice = () => {
+        if (diceConfig.length === 0 || isRolling) return;
         
-        if (!isMuted) {
-          shakeIntervalRef.current = setInterval(() => {
-            playShake();
-          }, 150);
-        }
-      };
-
-      const throwDice = () => {
-        setIsShaking(false);
         setIsRolling(true);
+        if (!isMuted) playRoll();
         
-        if (shakeIntervalRef.current) {
-          clearInterval(shakeIntervalRef.current);
-          shakeIntervalRef.current = null;
-        }
-        
-        if (!isMuted) playThrow();
-        
-        const seed = shakeDuration;
+        // Use current timestamp + random for seed
+        const seed = Date.now() + Math.random() * 10000;
         
         setTimeout(() => {
           const newResults = diceConfig.map((dice, index) => {
@@ -298,48 +235,44 @@
           setResults(newResults);
           setIsRolling(false);
           
-          // Check for nat 20!
+          // Check for nat 20
           const hasNat20 = newResults.some(r => r.sides === 20 && r.result === 20);
+          
+          // Check for snake eyes (two d6 both showing 1)
+          const d6Results = newResults.filter(r => r.sides === 6);
+          const isSnakeEyes = d6Results.length === 2 && 
+                             d6Results.every(r => r.result === 1) &&
+                             newResults.length === 2;
+          
           if (hasNat20 && !isMuted) {
             playNat20();
           } else if (!isMuted) {
             playResult();
           }
-        }, 1000);
+        }, 2000);
       };
 
       const rollAgain = () => {
         setResults([]);
-        setShakeDuration(0);
-        startShaking();
+        rollDice();
       };
 
       const reconfigure = () => {
         setDiceConfig([]);
         setResults([]);
-        setShakeDuration(0);
-        
-        if (shakeIntervalRef.current) {
-          clearInterval(shakeIntervalRef.current);
-          shakeIntervalRef.current = null;
-        }
       };
 
-      // Cleanup shake interval on unmount
-      useEffect(() => {
-        return () => {
-          if (shakeIntervalRef.current) {
-            clearInterval(shakeIntervalRef.current);
-          }
-        };
-      }, []);
-
       const total = results.reduce((sum, r) => sum + r.result, 0);
+      
+      // Check for snake eyes
+      const d6Results = results.filter(r => r.sides === 6);
+      const isSnakeEyes = d6Results.length === 2 && 
+                         d6Results.every(r => r.result === 1) &&
+                         results.length === 2;
 
       return (
         <div className="min-h-screen bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900 text-white p-4">
           <div className="max-w-4xl mx-auto">
-            {/* Mute button - always visible */}
             <button
               onClick={() => setIsMuted(!isMuted)}
               className="fixed top-4 right-4 bg-white/20 hover:bg-white/30 backdrop-blur rounded-full p-3 transition-all z-50 text-2xl"
@@ -353,13 +286,13 @@
                 <span className="text-4xl sm:text-6xl">🎲</span>
                 <h1 className="text-3xl sm:text-5xl font-bold">Dice Roller</h1>
               </div>
-              <p className="text-purple-200 text-sm sm:text-base">Select dice and shake to roll!</p>
+              <p className="text-purple-200 text-sm sm:text-base">Select dice and roll!</p>
               {hasMotionPermission && (
-                <p className="text-green-300 text-xs sm:text-sm mt-2">📱 Shake detection enabled</p>
+                <p className="text-green-300 text-xs sm:text-sm mt-2">📱 Shake to roll</p>
               )}
             </div>
 
-            {!isShaking && !isRolling && results.length === 0 && (
+            {!isRolling && results.length === 0 && (
               <div className="bg-white/10 backdrop-blur rounded-2xl p-4 sm:p-8 mb-6">
                 <h2 className="text-xl sm:text-2xl font-semibold mb-4">Select Your Dice</h2>
                 <div className="grid grid-cols-4 md:grid-cols-7 gap-2 sm:gap-3 mb-6">
@@ -399,10 +332,10 @@
                 {diceConfig.length > 0 && (
                   <div className="flex flex-col sm:flex-row gap-3">
                     <button
-                      onClick={startShaking}
+                      onClick={rollDice}
                       className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-3 sm:py-4 px-6 sm:px-8 rounded-xl text-lg sm:text-xl transition-all transform hover:scale-105"
                     >
-                      Start Shaking
+                      Roll Dice!
                       <span className="text-xs sm:text-sm block mt-1 opacity-75">(Space/Enter)</span>
                     </button>
                     <button
@@ -416,41 +349,30 @@
               </div>
             )}
 
-            {isShaking && (
-              <div className="bg-white/10 backdrop-blur rounded-2xl p-4 sm:p-8 mb-6 text-center">
-                <div className={`inline-block ${isShaking ? 'animate-bounce' : ''}`}>
-                  <div 
-                    className="text-6xl sm:text-8xl mx-auto mb-4"
-                    style={{
-                      animation: isShaking ? 'shake 0.3s infinite' : 'none'
-                    }} 
-                  >
-                    🎲
-                  </div>
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-bold mb-2">Shaking...</h2>
-                <p className="text-xl sm:text-2xl text-purple-200 mb-6">
-                  {(shakeDuration / 1000).toFixed(1)}s
-                </p>
-                <p className="text-sm sm:text-base text-purple-300 mb-6">
-                  {hasMotionPermission ? '🎲 Shake your phone to roll!' : 'Tap THROW when ready'}
-                </p>
-                <button
-                  onClick={throwDice}
-                  className="bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-bold py-3 sm:py-4 px-8 sm:px-12 rounded-xl text-xl sm:text-2xl transition-all transform hover:scale-105"
-                >
-                  THROW!
-                  <span className="text-xs sm:text-sm block mt-1 opacity-75">(Space/Enter)</span>
-                </button>
-              </div>
-            )}
-
             {isRolling && (
               <div className="bg-white/10 backdrop-blur rounded-2xl p-8 mb-6 text-center">
-                <div className="inline-block animate-spin text-8xl">
-                  🎲
+                <div className="flex justify-center gap-4 mb-6 flex-wrap">
+                  {diceConfig.map((dice, i) => (
+                    <div 
+                      key={dice.id}
+                      className="text-6xl animate-bounce"
+                      style={{
+                        animationDelay: `${i * 0.1}s`,
+                        animationDuration: '0.6s'
+                      }}
+                    >
+                      🎲
+                    </div>
+                  ))}
                 </div>
-                <h2 className="text-3xl font-bold mt-4">Rolling...</h2>
+                <h2 className="text-3xl font-bold mb-2">Rolling...</h2>
+                <div className="flex justify-center gap-2 text-lg text-purple-200">
+                  {diceConfig.map(dice => (
+                    <span key={dice.id} className="bg-white/20 px-3 py-1 rounded-lg">
+                      d{dice.sides}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -482,6 +404,12 @@
                     );
                   })}
                 </div>
+                {isSnakeEyes && (
+                  <div className="bg-red-900/40 border-2 border-red-500 rounded-xl p-4 sm:p-6 text-center mb-6">
+                    <div className="text-6xl mb-2">🐍</div>
+                    <div className="text-2xl font-bold">Snake Eyes!</div>
+                  </div>
+                )}
                 {results.length > 1 && (
                   <div className="bg-white/20 rounded-xl p-4 sm:p-6 text-center mb-6">
                     <div className="text-base sm:text-lg font-semibold mb-1">Total</div>
