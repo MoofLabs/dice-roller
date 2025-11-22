@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Roll dice for Dungeons & Dragons - shake and throw virtual dice">
+  <title>D&D Dice Roller</title>
+  
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#6366f1">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  
+  <!-- React and Babel from CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+    }
+    
+    @keyframes shake {
+      0%, 100% { transform: rotate(-5deg); }
+      50% { transform: rotate(5deg); }
+    }
+    
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.5) rotate(-180deg);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+    
+    // Lucide icons as React components
+    const Dices = (props) => {
+      useEffect(() => {
+        lucide.createIcons();
+      }, []);
+      return <i data-lucide="dices" {...props}></i>;
+    };
+    
+    const Settings = (props) => {
+      useEffect(() => {
+        lucide.createIcons();
+      }, []);
+      return <i data-lucide="settings" {...props}></i>;
+    };
+    
+    const Volume2 = (props) => {
+      useEffect(() => {
+        lucide.createIcons();
+      }, []);
+      return <i data-lucide="volume-2" {...props}></i>;
+    };
+    
+    const VolumeX = (props) => {
+      useEffect(() => {
+        lucide.createIcons();
+      }, []);
+      return <i data-lucide="volume-x" {...props}></i>;
+    };
+
+    const DICE_TYPES = [4, 6, 8, 10, 12, 20, 100];
+
+    // Web Audio API sound generator
+    const useAudio = () => {
+      const audioContextRef = useRef(null);
+
+      const getContext = () => {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        return audioContextRef.current;
+      };
+
+      const playShake = () => {
+        const ctx = getContext();
+        
+        // Create a gentle, pleasant rattle sound
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        const filter = ctx.createBiquadFilter();
+        
+        // Use sine wave for smoother, more pleasant sound
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 400 + Math.random() * 300; // Mid-high frequency range
+        
+        // Bandpass filter for a more focused, dice-like click
+        filter.type = 'bandpass';
+        filter.frequency.value = 600;
+        filter.Q.value = 2;
+        
+        oscillator.connect(filter);
+        filter.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        // Gentle volume and quick decay for a light click
+        gainNode.gain.setValueAtTime(0.05, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+        
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.08);
+      };
+
+      const playThrow = () => {
+        const ctx = getContext();
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        oscillator.frequency.setValueAtTime(400, ctx.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.3);
+        gainNode.gain.setValueAtTime(0.2, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.3);
+      };
+
+      const playResult = () => {
+        const ctx = getContext();
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        oscillator.frequency.setValueAtTime(800, ctx.currentTime);
+        oscillator.frequency.setValueAtTime(1000, ctx.currentTime + 0.05);
+        gainNode.gain.setValueAtTime(0.15, ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+        
+        oscillator.start(ctx.currentTime);
+        oscillator.stop(ctx.currentTime + 0.2);
+      };
+
+      return { playShake, playThrow, playResult };
+    };
+
+    function DiceRoller() {
+      const [diceConfig, setDiceConfig] = useState([]);
+      const [isShaking, setIsShaking] = useState(false);
+      const [isRolling, setIsRolling] = useState(false);
+      const [results, setResults] = useState([]);
+      const [shakeDuration, setShakeDuration] = useState(0);
+      const [shakeIntensity, setShakeIntensity] = useState(0);
+      const [hasMotionPermission, setHasMotionPermission] = useState(false);
+      const [isMuted, setIsMuted] = useState(false);
+      const shakeStartTime = useRef(null);
+      const animationFrame = useRef(null);
+      const lastShakeTime = useRef(0);
+      const shakeIntervalRef = useRef(null);
+      const { playShake, playThrow, playResult } = useAudio();
+
+      // Request motion permission on mobile
+      useEffect(() => {
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+          setHasMotionPermission(false);
+        } else if (window.DeviceMotionEvent) {
+          setHasMotionPermission(true);
+        }
+      }, []);
+
+      const requestMotionPermission = async () => {
+        if (typeof DeviceMotionEvent.requestPermission === 'function') {
+          try {
+            const permission = await DeviceMotionEvent.requestPermission();
+            setHasMotionPermission(permission === 'granted');
+          } catch (error) {
+            console.error('Motion permission error:', error);
+          }
+        }
+      };
+
+      // Handle device motion (shake detection)
+      useEffect(() => {
+        if (!hasMotionPermission || !isShaking) return;
+
+        const handleMotion = (event) => {
+          const acc = event.accelerationIncludingGravity;
+          if (!acc) return;
+
+          const magnitude = Math.sqrt(
+            acc.x * acc.x + acc.y * acc.y + acc.z * acc.z
+          );
+
+          if (magnitude > 25) {
+            const now = Date.now();
+            if (now - lastShakeTime.current > 100) {
+              setShakeIntensity(prev => Math.min(prev + 10, 100));
+              if (!isMuted) playShake();
+              lastShakeTime.current = now;
+            }
+          }
+        };
+
+        window.addEventListener('devicemotion', handleMotion);
+        return () => window.removeEventListener('devicemotion', handleMotion);
+      }, [hasMotionPermission, isShaking, playShake, isMuted]);
+
+      // Decay shake intensity
+      useEffect(() => {
+        if (shakeIntensity > 0) {
+          const timer = setTimeout(() => {
+            setShakeIntensity(prev => Math.max(0, prev - 5));
+          }, 100);
+          return () => clearTimeout(timer);
+        }
+      }, [shakeIntensity]);
+
+      // Update shake duration
+      useEffect(() => {
+        if (isShaking) {
+          shakeStartTime.current = Date.now();
+          const updateDuration = () => {
+            setShakeDuration(Date.now() - shakeStartTime.current);
+            animationFrame.current = requestAnimationFrame(updateDuration);
+          };
+          animationFrame.current = requestAnimationFrame(updateDuration);
+        } else {
+          if (animationFrame.current) {
+            cancelAnimationFrame(animationFrame.current);
+          }
+        }
+        return () => {
+          if (animationFrame.current) {
+            cancelAnimationFrame(animationFrame.current);
+          }
+        };
+      }, [isShaking]);
+
+      // Keyboard controls
+      useEffect(() => {
+        const handleKeyPress = (e) => {
+          if (e.code === 'Space' || e.code === 'Enter') {
+            e.preventDefault();
+            
+            if (!isShaking && !isRolling && results.length === 0 && diceConfig.length > 0) {
+              startShaking();
+            } else if (isShaking) {
+              throwDice();
+            } else if (results.length > 0) {
+              rollAgain();
+            }
+          }
+        };
+
+        window.addEventListener('keydown', handleKeyPress);
+        return () => window.removeEventListener('keydown', handleKeyPress);
+      }, [isShaking, isRolling, results, diceConfig]);
+
+      const addDice = (sides) => {
+        setDiceConfig([...diceConfig, { sides, id: Date.now() }]);
+      };
+
+      const removeDice = (id) => {
+        setDiceConfig(diceConfig.filter(d => d.id !== id));
+      };
+
+      const startShaking = async () => {
+        if (typeof DeviceMotionEvent !== 'undefined' && 
+            typeof DeviceMotionEvent.requestPermission === 'function' && 
+            !hasMotionPermission) {
+          await requestMotionPermission();
+        }
+        
+        setIsShaking(true);
+        setResults([]);
+        
+        // Continuous rattling sound while shaking
+        if (!isMuted) {
+          shakeIntervalRef.current = setInterval(() => {
+            playShake();
+          }, 150);
+        }
+      };
+
+      const throwDice = () => {
+        setIsShaking(false);
+        setIsRolling(true);
+        
+        // Stop the rattling sound
+        if (shakeIntervalRef.current) {
+          clearInterval(shakeIntervalRef.current);
+          shakeIntervalRef.current = null;
+        }
+        
+        if (!isMuted) playThrow();
+        
+        const seed = shakeDuration + shakeIntensity * 100;
+        
+        setTimeout(() => {
+          const newResults = diceConfig.map((dice, index) => {
+            const random = Math.sin(seed * (index + 1) * 0.001) * 10000;
+            const roll = Math.floor((Math.abs(random) % 1) * dice.sides) + 1;
+            return { sides: dice.sides, result: roll, id: dice.id };
+          });
+          setResults(newResults);
+          setIsRolling(false);
+          if (!isMuted) playResult();
+          setShakeIntensity(0);
+        }, 1000);
+      };
+
+      const rollAgain = () => {
+        setResults([]);
+        startShaking();
+      };
+
+      const reconfigure = () => {
+        setDiceConfig([]);
+        setResults([]);
+        setShakeDuration(0);
+        setShakeIntensity(0);
+        
+        if (shakeIntervalRef.current) {
+          clearInterval(shakeIntervalRef.current);
+          shakeIntervalRef.current = null;
+        }
+      };
+
+      // Cleanup shake interval on unmount
+      useEffect(() => {
+        return () => {
+          if (shakeIntervalRef.current) {
+            clearInterval(shakeIntervalRef.current);
+          }
+        };
+      }, []);
+
+      const total = results.reduce((sum, r) => sum + r.result, 0);
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-purple-900 via-indigo-900 to-blue-900 text-white p-4">
+          <div className="max-w-4xl mx-auto">
+            <button
+              onClick={() => setIsMuted(!isMuted)}
+              className="fixed top-4 right-4 bg-white/20 hover:bg-white/30 backdrop-blur rounded-full p-3 transition-all z-50"
+              aria-label={isMuted ? 'Unmute' : 'Mute'}
+            >
+              {isMuted ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
+            </button>
+
+            <div className="text-center mb-8 pt-8">
+              <div className="flex items-center justify-center gap-3 mb-2">
+                <Dices className="w-12 h-12" />
+                <h1 className="text-5xl font-bold">Dice Roller</h1>
+              </div>
+              <p className="text-purple-200">Shake to randomize, throw when ready!</p>
+              {hasMotionPermission && (
+                <p className="text-green-300 text-sm mt-2">📱 Shake your device while shaking!</p>
+              )}
+            </div>
+
+            {!isShaking && !isRolling && results.length === 0 && (
+              <div className="bg-white/10 backdrop-blur rounded-2xl p-8 mb-6">
+                <h2 className="text-2xl font-semibold mb-4">Select Your Dice</h2>
+                <div className="grid grid-cols-4 md:grid-cols-7 gap-3 mb-6">
+                  {DICE_TYPES.map(sides => (
+                    <button
+                      key={sides}
+                      onClick={() => addDice(sides)}
+                      className="bg-gradient-to-br from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-xl p-4 font-bold text-lg transition-all transform hover:scale-105"
+                    >
+                      d{sides}
+                    </button>
+                  ))}
+                </div>
+
+                {diceConfig.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold mb-3">Selected Dice:</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {diceConfig.map(dice => (
+                        <div
+                          key={dice.id}
+                          className="bg-white/20 px-4 py-2 rounded-lg flex items-center gap-2"
+                        >
+                          <span>d{dice.sides}</span>
+                          <button
+                            onClick={() => removeDice(dice.id)}
+                            className="text-red-300 hover:text-red-100 font-bold"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {diceConfig.length > 0 && (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={startShaking}
+                      className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-4 px-8 rounded-xl text-xl transition-all transform hover:scale-105"
+                    >
+                      Start Shaking
+                      <span className="text-sm block mt-1 opacity-75">(Space/Enter)</span>
+                    </button>
+                    <button
+                      onClick={reconfigure}
+                      className="bg-white/20 hover:bg-white/30 font-semibold py-4 px-6 rounded-xl transition-all"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isShaking && (
+              <div className="bg-white/10 backdrop-blur rounded-2xl p-8 mb-6 text-center">
+                <div className={`inline-block ${isShaking ? 'animate-bounce' : ''}`}>
+                  <Dices 
+                    className="w-32 h-32 mx-auto mb-4" 
+                    style={{
+                      animation: isShaking ? 'shake 0.3s infinite' : 'none',
+                      transform: `rotate(${shakeIntensity * 3.6}deg)`
+                    }} 
+                  />
+                </div>
+                <h2 className="text-3xl font-bold mb-2">Shaking...</h2>
+                <p className="text-2xl text-purple-200 mb-2">
+                  {(shakeDuration / 1000).toFixed(1)}s
+                </p>
+                {shakeIntensity > 0 && (
+                  <div className="mb-4">
+                    <div className="w-full bg-white/20 rounded-full h-3 overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-green-400 to-emerald-500 h-full transition-all duration-200"
+                        style={{ width: `${shakeIntensity}%` }}
+                      />
+                    </div>
+                    <p className="text-sm text-green-300 mt-1">Shake Intensity</p>
+                  </div>
+                )}
+                <p className="text-sm text-purple-300 mb-6">
+                  {hasMotionPermission ? 'Shake your device for more randomness!' : 'Keep shaking for better randomization!'}
+                </p>
+                <button
+                  onClick={throwDice}
+                  className="bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700 text-white font-bold py-4 px-12 rounded-xl text-2xl transition-all transform hover:scale-105"
+                >
+                  THROW!
+                  <span className="text-sm block mt-1 opacity-75">(Space/Enter)</span>
+                </button>
+              </div>
+            )}
+
+            {isRolling && (
+              <div className="bg-white/10 backdrop-blur rounded-2xl p-8 mb-6 text-center">
+                <div className="inline-block animate-spin">
+                  <Dices className="w-32 h-32 mx-auto mb-4" />
+                </div>
+                <h2 className="text-3xl font-bold">Rolling...</h2>
+              </div>
+            )}
+
+            {results.length > 0 && !isRolling && (
+              <div className="bg-white/10 backdrop-blur rounded-2xl p-8 mb-6">
+                <h2 className="text-3xl font-bold mb-6 text-center">Results</h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
+                  {results.map((result, index) => (
+                    <div
+                      key={result.id}
+                      className="bg-gradient-to-br from-yellow-400 to-orange-500 text-gray-900 rounded-xl p-6 text-center transform transition-all"
+                      style={{
+                        animation: `fadeIn 0.5s ease-out ${index * 0.1}s backwards`
+                      }}
+                    >
+                      <div className="text-sm font-semibold opacity-75 mb-1">
+                        d{result.sides}
+                      </div>
+                      <div className="text-4xl font-bold">
+                        {result.result}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {results.length > 1 && (
+                  <div className="bg-white/20 rounded-xl p-6 text-center mb-6">
+                    <div className="text-lg font-semibold mb-1">Total</div>
+                    <div className="text-5xl font-bold">{total}</div>
+                  </div>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={rollAgain}
+                    className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-4 px-8 rounded-xl text-xl transition-all transform hover:scale-105"
+                  >
+                    Roll These Again
+                    <span className="text-sm block mt-1 opacity-75">(Space/Enter)</span>
+                  </button>
+                  <button
+                    onClick={reconfigure}
+                    className="bg-white/20 hover:bg-white/30 font-semibold py-4 px-6 rounded-xl transition-all flex items-center gap-2"
+                  >
+                    <Settings className="w-5 h-5" />
+                    Reconfigure
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Render the app
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<DiceRoller />);
+  </script>
+</body>
+</html>
