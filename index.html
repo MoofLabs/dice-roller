@@ -199,26 +199,26 @@
       useEffect(() => {
         if (!hasMotionPermission || !isShaking) return;
 
-        const handleMotion = (event) => {
-          const acc = event.accelerationIncludingGravity;
-          if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
-
-          const magnitude = Math.sqrt(
-            acc.x * acc.x + acc.y * acc.y + acc.z * acc.z
-          );
-
-          console.log('Shake magnitude:', magnitude.toFixed(2));
-
-          if (magnitude > 15) {
-            const now = Date.now();
-            if (now - lastShakeTime.current > 100) {
-              console.log('SHAKE DETECTED!', magnitude.toFixed(2));
-              setShakeIntensity(prev => Math.min(prev + 10, 100));
-              if (!isMuted) playShake();
-              lastShakeTime.current = now;
-            }
+      const handleMotion = (event) => {
+        const acc = event.accelerationIncludingGravity;
+        if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
+      
+        const magnitude = Math.sqrt(
+          acc.x * acc.x + acc.y * acc.y + acc.z * acc.z
+        );
+      
+        console.log('Shake magnitude:', magnitude.toFixed(2));
+      
+        // Detect a strong shake - this triggers the throw!
+        if (magnitude > 20) {
+          const now = Date.now();
+          if (now - lastShakeTime.current > 500) {
+            console.log('SHAKE TO THROW DETECTED!', magnitude.toFixed(2));
+            throwDice();
+            lastShakeTime.current = now;
           }
-        };
+        }
+      };
 
         window.addEventListener('devicemotion', handleMotion);
         return () => window.removeEventListener('devicemotion', handleMotion);
@@ -366,10 +366,10 @@
                 <Dices className="w-8 h-8 sm:w-12 sm:h-12" />
                 <h1 className="text-3xl sm:text-5xl font-bold">Dice Roller</h1>
               </div>
-              <p className="text-purple-200 text-sm sm:text-base">Shake to randomize, throw when ready!</p>
-              {hasMotionPermission && (
-                <p className="text-green-300 text-xs sm:text-sm mt-2">📱 Shake your device while shaking!</p>
-              )}
+                <p className="text-purple-200 text-sm sm:text-base">Select dice and shake to roll!</p>
+                {hasMotionPermission && (
+                  <p className="text-green-300 text-xs sm:text-sm mt-2">📱 Shake detection enabled</p>
+                )}
             </div>
 
             {!isShaking && !isRolling && results.length === 0 && (
@@ -435,28 +435,16 @@
                   <Dices 
                     className="w-24 h-24 sm:w-32 sm:h-32 mx-auto mb-4" 
                     style={{
-                      animation: isShaking ? 'shake 0.3s infinite' : 'none',
-                      transform: `rotate(${shakeIntensity * 3.6}deg)`
+                      animation: isShaking ? 'shake 0.3s infinite' : 'none'
                     }} 
                   />
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-bold mb-2">Shaking...</h2>
-                <p className="text-xl sm:text-2xl text-purple-200 mb-2">
+                <p className="text-xl sm:text-2xl text-purple-200 mb-6">
                   {(shakeDuration / 1000).toFixed(1)}s
                 </p>
-                {shakeIntensity > 0 && (
-                  <div className="mb-4">
-                    <div className="w-full bg-white/20 rounded-full h-3 overflow-hidden">
-                      <div 
-                        className="bg-gradient-to-r from-green-400 to-emerald-500 h-full transition-all duration-200"
-                        style={{ width: `${shakeIntensity}%` }}
-                      />
-                    </div>
-                    <p className="text-xs sm:text-sm text-green-300 mt-1">Shake Intensity</p>
-                  </div>
-                )}
-                <p className="text-xs sm:text-sm text-purple-300 mb-6">
-                  {hasMotionPermission ? 'Shake your device for more randomness!' : 'Keep shaking for better randomization!'}
+                <p className="text-sm sm:text-base text-purple-300 mb-6">
+                  {hasMotionPermission ? '🎲 Shake your phone to roll!' : 'Tap THROW when ready'}
                 </p>
                 <button
                   onClick={throwDice}
