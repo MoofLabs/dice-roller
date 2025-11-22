@@ -200,15 +200,18 @@
       useEffect(() => {
         if (!hasMotionPermission || !isShaking) return;
 
-        const handleMotion = (event) => {
-          const acc = event.accelerationIncludingGravity;
-          if (!acc) return;
-
-          const magnitude = Math.sqrt(
-            acc.x * acc.x + acc.y * acc.y + acc.z * acc.z
-          );
-
-          if (magnitude > 25) {
+      const handleMotion = (event) => {
+        const acc = event.accelerationIncludingGravity;
+        if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
+      
+        // Calculate total acceleration magnitude
+        const magnitude = Math.sqrt(
+          acc.x * acc.x + acc.y * acc.y + acc.z * acc.z
+        );
+      
+        // Detect shake (adjusted threshold for better sensitivity)
+        // iPhone typically shows 9.8 m/s² at rest (gravity), spikes to 15-30+ when shaking
+        if (magnitude > 15) {
             const now = Date.now();
             if (now - lastShakeTime.current > 100) {
               setShakeIntensity(prev => Math.min(prev + 10, 100));
