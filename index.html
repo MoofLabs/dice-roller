@@ -32,9 +32,16 @@
       overflow-x: hidden;
     }
     
-    @keyframes shake {
-      0%, 100% { transform: rotate(-5deg); }
-      50% { transform: rotate(5deg); }
+    @keyframes tumble {
+      0% { transform: rotate(0deg) scale(1); }
+      25% { transform: rotate(90deg) scale(1.1); }
+      50% { transform: rotate(180deg) scale(1); }
+      75% { transform: rotate(270deg) scale(1.1); }
+      100% { transform: rotate(360deg) scale(1); }
+    }
+    
+    .rolling-die {
+      animation: tumble 1s linear infinite;
     }
     
     @keyframes fadeIn {
@@ -57,6 +64,126 @@
 
     const DICE_TYPES = [4, 6, 8, 10, 12, 20, 100];
 
+    // Dice face component
+    const DiceFace = ({ sides, number, isRolling }) => {
+      if (sides === 6) {
+        // D6 with dots
+        const dots = {
+          1: [[1, 1]],
+          2: [[0, 0], [2, 2]],
+          3: [[0, 0], [1, 1], [2, 2]],
+          4: [[0, 0], [0, 2], [2, 0], [2, 2]],
+          5: [[0, 0], [0, 2], [1, 1], [2, 0], [2, 2]],
+          6: [[0, 0], [0, 1], [0, 2], [2, 0], [2, 1], [2, 2]]
+        };
+        
+        return (
+          <div className="relative w-20 h-20 bg-white rounded-lg shadow-xl border-2 border-gray-300">
+            <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 p-2">
+              {dots[number]?.map((pos, i) => (
+                <div key={i} className="flex items-center justify-center" style={{gridColumn: pos[0] + 1, gridRow: pos[1] + 1}}>
+                  <div className="w-3 h-3 bg-gray-900 rounded-full"></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      }
+      
+      if (sides === 4) {
+        // D4 as triangle
+        return (
+          <div className="relative w-20 h-20 flex items-center justify-center">
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+              <polygon points="50,10 90,80 10,80" fill="white" stroke="#374151" strokeWidth="3"/>
+              <text x="50" y="60" textAnchor="middle" className="text-2xl font-bold fill-gray-900">{number}</text>
+            </svg>
+          </div>
+        );
+      }
+      
+      if (sides === 8) {
+        // D8 as diamond
+        return (
+          <div className="relative w-20 h-20 flex items-center justify-center">
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+              <polygon points="50,5 90,50 50,95 10,50" fill="white" stroke="#374151" strokeWidth="3"/>
+              <text x="50" y="60" textAnchor="middle" className="text-2xl font-bold fill-gray-900">{number}</text>
+            </svg>
+          </div>
+        );
+      }
+      
+      if (sides === 10 || sides === 100) {
+        // D10 as kite shape
+        return (
+          <div className="relative w-20 h-20 flex items-center justify-center">
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+              <polygon points="50,10 75,40 65,90 35,90 25,40" fill="white" stroke="#374151" strokeWidth="3"/>
+              <text x="50" y="60" textAnchor="middle" className="text-2xl font-bold fill-gray-900">{number}</text>
+            </svg>
+          </div>
+        );
+      }
+      
+      if (sides === 12) {
+        // D12 as pentagon
+        return (
+          <div className="relative w-20 h-20 flex items-center justify-center">
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+              <polygon points="50,10 85,35 75,75 25,75 15,35" fill="white" stroke="#374151" strokeWidth="3"/>
+              <text x="50" y="60" textAnchor="middle" className="text-2xl font-bold fill-gray-900">{number}</text>
+            </svg>
+          </div>
+        );
+      }
+      
+      if (sides === 20) {
+        // D20 as hexagon
+        return (
+          <div className="relative w-20 h-20 flex items-center justify-center">
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+              <polygon points="50,5 85,25 85,65 50,85 15,65 15,25" fill="white" stroke="#374151" strokeWidth="3"/>
+              <text x="50" y="60" textAnchor="middle" className="text-2xl font-bold fill-gray-900">{number}</text>
+            </svg>
+          </div>
+        );
+      }
+      
+      return null;
+    };
+
+    // Rolling dice animation component
+    const RollingDice = ({ dice }) => {
+      const [currentNumbers, setCurrentNumbers] = useState(
+        dice.map(d => Math.floor(Math.random() * d.sides) + 1)
+      );
+      
+      useEffect(() => {
+        const interval = setInterval(() => {
+          setCurrentNumbers(dice.map(d => Math.floor(Math.random() * d.sides) + 1));
+        }, 100);
+        
+        return () => clearInterval(interval);
+      }, [dice]);
+      
+      return (
+        <div className="flex flex-wrap justify-center gap-6 items-center min-h-[200px]">
+          {dice.map((die, i) => (
+            <div
+              key={die.id}
+              className="rolling-die"
+              style={{
+                animationDelay: `${i * 0.1}s`
+              }}
+            >
+              <DiceFace sides={die.sides} number={currentNumbers[i]} isRolling={true} />
+            </div>
+          ))}
+        </div>
+      );
+    };
+
     // Web Audio API sound generator
     const useAudio = () => {
       const audioContextRef = useRef(null);
@@ -70,7 +197,6 @@
 
       const playRoll = () => {
         const ctx = getContext();
-        // Multiple clicks for rolling sound
         for (let i = 0; i < 8; i++) {
           const oscillator = ctx.createOscillator();
           const gainNode = ctx.createGain();
@@ -115,7 +241,7 @@
 
       const playNat20 = () => {
         const ctx = getContext();
-        const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+        const notes = [523.25, 659.25, 783.99];
         
         notes.forEach((freq, i) => {
           const oscillator = ctx.createOscillator();
@@ -148,7 +274,6 @@
       const lastShakeTime = useRef(0);
       const { playRoll, playResult, playNat20 } = useAudio();
 
-      // Request motion permission immediately
       useEffect(() => {
         const requestPermission = async () => {
           if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -166,7 +291,6 @@
         requestPermission();
       }, []);
 
-      // Shake detection - triggers roll
       useEffect(() => {
         if (!hasMotionPermission || diceConfig.length === 0 || isRolling || results.length > 0) return;
 
@@ -191,7 +315,6 @@
         return () => window.removeEventListener('devicemotion', handleMotion);
       }, [hasMotionPermission, diceConfig, isRolling, results]);
 
-      // Keyboard controls
       useEffect(() => {
         const handleKeyPress = (e) => {
           if (e.code === 'Space' || e.code === 'Enter') {
@@ -223,7 +346,6 @@
         setIsRolling(true);
         if (!isMuted) playRoll();
         
-        // Use current timestamp + random for seed
         const seed = Date.now() + Math.random() * 10000;
         
         setTimeout(() => {
@@ -235,14 +357,7 @@
           setResults(newResults);
           setIsRolling(false);
           
-          // Check for nat 20
           const hasNat20 = newResults.some(r => r.sides === 20 && r.result === 20);
-          
-          // Check for snake eyes (two d6 both showing 1)
-          const d6Results = newResults.filter(r => r.sides === 6);
-          const isSnakeEyes = d6Results.length === 2 && 
-                             d6Results.every(r => r.result === 1) &&
-                             newResults.length === 2;
           
           if (hasNat20 && !isMuted) {
             playNat20();
@@ -264,7 +379,6 @@
 
       const total = results.reduce((sum, r) => sum + r.result, 0);
       
-      // Check for snake eyes
       const d6Results = results.filter(r => r.sides === 6);
       const isSnakeEyes = d6Results.length === 2 && 
                          d6Results.every(r => r.result === 1) &&
@@ -351,54 +465,28 @@
 
             {isRolling && (
               <div className="bg-white/10 backdrop-blur rounded-2xl p-8 mb-6 text-center">
-                <div className="flex justify-center gap-4 mb-6 flex-wrap">
-                  {diceConfig.map((dice, i) => (
-                    <div 
-                      key={dice.id}
-                      className="text-6xl animate-bounce"
-                      style={{
-                        animationDelay: `${i * 0.1}s`,
-                        animationDuration: '0.6s'
-                      }}
-                    >
-                      🎲
-                    </div>
-                  ))}
-                </div>
-                <h2 className="text-3xl font-bold mb-2">Rolling...</h2>
-                <div className="flex justify-center gap-2 text-lg text-purple-200">
-                  {diceConfig.map(dice => (
-                    <span key={dice.id} className="bg-white/20 px-3 py-1 rounded-lg">
-                      d{dice.sides}
-                    </span>
-                  ))}
-                </div>
+                <h2 className="text-3xl font-bold mb-6">Rolling...</h2>
+                <RollingDice dice={diceConfig} />
               </div>
             )}
 
             {results.length > 0 && !isRolling && (
               <div className="bg-white/10 backdrop-blur rounded-2xl p-4 sm:p-8 mb-6">
                 <h2 className="text-2xl sm:text-3xl font-bold mb-6 text-center">Results</h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+                <div className="flex flex-wrap justify-center gap-6 mb-6">
                   {results.map((result, index) => {
                     const isNat20 = result.sides === 20 && result.result === 20;
                     return (
                       <div
                         key={result.id}
-                        className={`${isNat20 
-                          ? 'bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-400 shadow-lg shadow-yellow-500/50' 
-                          : 'bg-gradient-to-br from-yellow-400 to-orange-500'
-                        } text-gray-900 rounded-xl p-4 sm:p-6 text-center transform transition-all`}
+                        className={`transform transition-all ${isNat20 ? 'scale-110' : ''}`}
                         style={{
                           animation: `fadeIn 0.5s ease-out ${index * 0.1}s backwards`
                         }}
                       >
-                        <div className="text-xs sm:text-sm font-semibold opacity-75 mb-1">
-                          d{result.sides}
-                        </div>
-                        <div className={`text-3xl sm:text-4xl font-bold ${isNat20 ? 'animate-pulse' : ''}`}>
-                          {result.result}
-                          {isNat20 && <span className="block text-xl">🎉</span>}
+                        <div className={`${isNat20 ? 'ring-4 ring-yellow-400 rounded-lg' : ''}`}>
+                          <DiceFace sides={result.sides} number={result.result} />
+                          {isNat20 && <div className="text-center text-2xl mt-2">🎉</div>}
                         </div>
                       </div>
                     );
