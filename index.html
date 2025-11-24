@@ -277,12 +277,8 @@
       useEffect(() => {
         const requestPermission = async () => {
           if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-            try {
-              const permission = await DeviceMotionEvent.requestPermission();
-              setHasMotionPermission(permission === 'granted');
-            } catch (error) {
-              setHasMotionPermission(false);
-            }
+            // iOS 13+ - don't auto-request, wait for user action
+            setHasMotionPermission(false);
           } else if (window.DeviceMotionEvent) {
             setHasMotionPermission(true);
           }
@@ -290,6 +286,21 @@
         
         requestPermission();
       }, []);
+
+      const enableShake = async () => {
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+          try {
+            const permission = await DeviceMotionEvent.requestPermission();
+            setHasMotionPermission(permission === 'granted');
+            if (permission !== 'granted') {
+              alert('Motion permission denied. You can still use the Roll button!');
+            }
+          } catch (error) {
+            console.error('Permission error:', error);
+            setHasMotionPermission(false);
+          }
+        }
+      };
 
       useEffect(() => {
         if (!hasMotionPermission || diceConfig.length === 0 || isRolling || results.length > 0) return;
@@ -401,8 +412,16 @@
                 <h1 className="text-3xl sm:text-5xl font-bold">Dice Roller</h1>
               </div>
               <p className="text-purple-200 text-sm sm:text-base">Select dice and roll!</p>
+              {!hasMotionPermission && typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function' && (
+                <button
+                  onClick={enableShake}
+                  className="mt-3 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all"
+                >
+                  📱 Enable Shake to Roll
+                </button>
+              )}
               {hasMotionPermission && (
-                <p className="text-green-300 text-xs sm:text-sm mt-2">📱 Shake to roll</p>
+                <p className="text-green-300 text-xs sm:text-sm mt-2">📱 Shake enabled!</p>
               )}
             </div>
 
