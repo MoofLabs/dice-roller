@@ -303,7 +303,7 @@
       };
 
       useEffect(() => {
-        if (!hasMotionPermission || diceConfig.length === 0 || isRolling || results.length > 0) return;
+        if (!hasMotionPermission || diceConfig.length === 0 || isRolling) return;
 
         const handleMotion = (event) => {
           const acc = event.accelerationIncludingGravity;
@@ -315,7 +315,8 @@
 
           if (magnitude > 20) {
             const now = Date.now();
-            if (now - lastShakeTime.current > 1000) {
+            // 2 second cooldown to prevent accidental double-rolls
+            if (now - lastShakeTime.current > 2000) {
               rollDice();
               lastShakeTime.current = now;
             }
