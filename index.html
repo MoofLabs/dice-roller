@@ -317,6 +317,7 @@
             const now = Date.now();
             // 2 second cooldown to prevent accidental double-rolls
             if (now - lastShakeTime.current > 2000) {
+              console.log('Shake detected, triggering roll');
               rollDice();
               lastShakeTime.current = now;
             }
@@ -325,7 +326,7 @@
 
         window.addEventListener('devicemotion', handleMotion);
         return () => window.removeEventListener('devicemotion', handleMotion);
-      }, [hasMotionPermission, diceConfig, isRolling, results]);
+      }, [hasMotionPermission, diceConfig, isRolling]);
 
       useEffect(() => {
         const handleKeyPress = (e) => {
@@ -355,6 +356,7 @@
       const rollDice = () => {
         if (diceConfig.length === 0 || isRolling) return;
         
+        console.log('Starting roll...');
         setIsRolling(true);
         if (!isMuted) playRoll();
         
@@ -369,6 +371,10 @@
           setResults(newResults);
           setIsRolling(false);
           
+          // Reset shake cooldown after rolling completes to prevent immediate re-trigger
+          lastShakeTime.current = Date.now();
+          console.log('Roll complete, cooldown reset');
+          
           const hasNat20 = newResults.some(r => r.sides === 20 && r.result === 20);
           
           if (hasNat20 && !isMuted) {
@@ -380,6 +386,7 @@
       };
 
       const rollAgain = () => {
+        console.log('Roll again clicked');
         setResults([]);
         rollDice();
       };
