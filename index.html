@@ -689,14 +689,16 @@
 
     // Device shake detection
     window.addEventListener('devicemotion', (e) => {
-      if (!hasMotionPermission || state !== 'shaking') return;
+      if (!hasMotionPermission) return;
+      if (state !== 'shaking' && state !== 'results') return;
       const acc = e.accelerationIncludingGravity;
       if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
       const mag = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
       if (mag > 20) {
         const now = Date.now();
         if (now - lastShakeTime > 500) {
-          throwDice();
+          if (state === 'results') rollAgain();
+          else throwDice();
           lastShakeTime = now;
         }
       }
