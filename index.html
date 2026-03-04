@@ -303,7 +303,8 @@
     let diceConfig = [];
     let nextId = 0;
     let isMuted = false;
-    let hasMotionPermission = localStorage.getItem('motionPermission') === 'granted';
+    let hasMotionPermission = false;
+    const motionPreviouslyGranted = localStorage.getItem('motionPermission') === 'granted';
     let shakeIntervalId = null;
     let lastShakeTime = 0;
     let state = 'select'; // select | shaking | rolling | results
@@ -499,7 +500,7 @@
     async function startShaking() {
       if (diceConfig.length === 0) return;
 
-      // Request motion permission from user gesture (required on iOS)
+      // Request motion permission from user gesture (required on iOS every session)
       if (typeof DeviceMotionEvent !== 'undefined' &&
           typeof DeviceMotionEvent.requestPermission === 'function' &&
           !hasMotionPermission) {
@@ -511,7 +512,10 @@
             motionStatus.classList.remove('hidden');
             shakeHint.textContent = 'Shake your phone to roll!';
           }
-        } catch (_) {}
+        } catch (_) {
+          // Permission denied or dismissed — clear stored state
+          localStorage.removeItem('motionPermission');
+        }
       }
 
       showScreen('shaking');
@@ -679,17 +683,19 @@
       else if (state === 'results') rollAgain();
     });
 
-    // ── Motion detection (non-iOS gets it automatically) ──
+    // ── Motion detection ──
     if (typeof DeviceMotionEvent !== 'undefined') {
       if (typeof DeviceMotionEvent.requestPermission !== 'function' && window.DeviceMotionEvent) {
         // Android / older iOS: permission not required
         hasMotionPermission = true;
         motionStatus.classList.remove('hidden');
-      } else if (hasMotionPermission) {
-        // iOS: permission was previously granted (persisted in localStorage)
-        motionStatus.classList.remove('hidden');
       }
-      // iOS first-time permission is requested in startShaking() via user gesture
+      // iOS: real permission must be requested each session via user gesture
+      // in startShaking(). We show the hint text if they've granted before so
+      // they know shake is available.
+      if (motionPreviouslyGranted || hasMotionPermission) {
+        shakeHint.textContent = 'Shake your phone or tap THROW!';
+      }
     }
 
     // Device shake detection
