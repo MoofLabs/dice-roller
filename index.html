@@ -303,7 +303,7 @@
     let diceConfig = [];
     let nextId = 0;
     let isMuted = false;
-    let hasMotionPermission = false;
+    let hasMotionPermission = localStorage.getItem('motionPermission') === 'granted';
     let shakeIntervalId = null;
     let lastShakeTime = 0;
     let state = 'select'; // select | shaking | rolling | results
@@ -507,6 +507,7 @@
           const perm = await DeviceMotionEvent.requestPermission();
           hasMotionPermission = perm === 'granted';
           if (hasMotionPermission) {
+            localStorage.setItem('motionPermission', 'granted');
             motionStatus.classList.remove('hidden');
             shakeHint.textContent = 'Shake your phone to roll!';
           }
@@ -635,7 +636,9 @@
 
     function rollAgain() {
       totalCard.classList.remove('visible');
-      startShaking();
+      // Skip the shake screen — go straight to rolling
+      state = 'shaking'; // throwDice() requires this
+      throwDice();
     }
 
     function reconfigure() {
@@ -682,9 +685,11 @@
         // Android / older iOS: permission not required
         hasMotionPermission = true;
         motionStatus.classList.remove('hidden');
-        shakeHint.textContent = 'Shake your phone to roll!';
+      } else if (hasMotionPermission) {
+        // iOS: permission was previously granted (persisted in localStorage)
+        motionStatus.classList.remove('hidden');
       }
-      // iOS permission is requested in startShaking() via user gesture
+      // iOS first-time permission is requested in startShaking() via user gesture
     }
 
     // Device shake detection

@@ -13,12 +13,13 @@ Pick any combination of standard dice (d4, d6, d8, d10, d12, d20, d100), shake o
 - Tap "THROW" to roll (or shake your phone)
 - Results show one at a time with a slot-machine effect
 - Total is calculated automatically for multi-die rolls
+- Hit "Roll These Again" to instantly re-roll the same dice (no extra taps)
 
 ### Notable bits
 
 - **Nat 20**: Gets a golden glow and a triumphant fanfare chord.
 - **Nat 1**: Gets the grim treatment it deserves -- dark card, red glow, sad trombone.
-- **Shake to roll**: On mobile, physically shaking your phone during the shake phase will throw the dice. iOS requires granting motion permission on first use.
+- **Shake to roll**: On mobile, physically shaking your phone during the shake phase will throw the dice. iOS requires granting motion permission once -- the app remembers it for next time.
 - **Haptic feedback**: Vibrates on throw and as each die settles (Android; iOS doesn't support the Vibration API).
 - **Die-type colors**: Each die type gets its own color on result cards so mixed rolls are easy to scan.
 
